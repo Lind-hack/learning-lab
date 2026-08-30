@@ -1,0 +1,251 @@
+{
+  "id": "2026-08-31-idempotency-retries",
+  "isDemo": false,
+  "publishedAt": "2026-08-31T01:39:23+02:00",
+  "topic": "Idempotency: Making Retries Safe",
+  "difficulty": "foundation",
+  "estimatedMinutes": 20,
+  "newsContext": {
+    "headline": "Official technical context: retries are only safe when the intended side effect is repeatable",
+    "summary": "No current news incident is used in this lesson because the available incident reports could not be responsibly verified as primary, current sources. Instead, the lesson uses the IETF HTTP standard, AWS Builders' Library, Stripe's API documentation, and MDN to establish the mechanism: a client can lose a response after the server has already acted, so blindly retrying a write can duplicate the action.",
+    "whyItMatters": "383 has cron-style automation, external calls, market settlement, and a Telegram dispatcher. Those systems can run twice or be unsure whether the previous run finished. Idempotency is the design rule that turns an uncertain retry into a safe repeat or a deliberate no-op."
+  },
+  "learningGoal": "By the end of this lesson, you should be able to define idempotency, explain why a lost response makes retries dangerous, and identify the key or database constraint that prevents duplicate effects in a 383 workflow.",
+  "whyNow": "Verified project evidence shows this concept is already present in several 383 paths: five-minute and two-minute run keys in automation workers, a race-aware audit-row insert, a unique settlement row, and a Telegram posting ledger. Understanding the idea now lets you review whether those protections cover every failure window instead of treating the word idempotent as a guarantee by itself.",
+  "known": "Known from the inspected source: lib/tregu-automation-server.ts buckets live runs into five-minute keys and rereads after an insert error; lib/tregu-pre-match-refresh-server.ts buckets pre-match runs into two-minute keys; the settlement migration uses ON CONFLICT DO NOTHING for a unique market/user/side row; the Telegram migration makes article_slug unique and the dispatcher reads that ledger before sending.",
+  "inference": "Inference: the project is deliberately trying to make repeated scheduler invocations harmless. The strongest protection is at the database boundary, but each workflow still has a different gap between its external side effect and its ledger or audit write.",
+  "uncertainty": "Uncertainty: a read-only source inspection cannot prove how the deployed database behaves under two concurrent workers, whether every relevant constraint is present in production, or whether an external message was sent just before a ledger write failed. Those cases require isolated tests or operational evidence.",
+  "test": "Inspect one automation path and draw its failure window: mark the moment before the side effect, the side effect itself, and the ledger/audit update after it. Then write a scratch test for two identical calls and for the same key with a different payload. Do not run it against production.",
+  "projectConnection": {
+    "files": [
+      "lib/tregu-automation-server.ts",
+      "lib/tregu-pre-match-refresh-server.ts",
+      "supabase/migrations/0011_tregu_generic_sport_market_engine.sql",
+      "supabase/migrations/0046_telegram_posts.sql",
+      "app/api/cron/dispatch-telegram/route.ts"
+    ],
+    "explanation": "A scheduler invokes a worker. The worker derives a stable time-bucket key, checks market_automation_runs, and tries to claim the run with an insert. The live worker rereads after an insert error so two workers racing for the same key can converge on the existing run. Settlement adds another database guard: a unique sport_market_settlements row is inserted before the payout update, so a retry that sees the conflict skips the payout. Telegram follows a different pattern: it selects recent article slugs from telegram_posts, sends the message, then inserts the slug. That ledger prevents ordinary replays, but the send-before-ledger ordering leaves a small gap if the message succeeds and the ledger insert fails. Idempotency means reviewing every one of these transitions, not merely adding a retry loop."
+  },
+  "sections": [
+    {
+      "title": "1. The problem: a timeout does not tell you what happened",
+      "body": "Imagine a worker sends a request to create something. The server receives it, commits the change, and sends a success response. Before that response reaches the worker, the network connection breaks. The worker sees a timeout or connection error, but it cannot distinguish two realities: the server never acted, or the server acted and only the response was lost. Retrying solves the first reality but can duplicate the side effect in the second.\n\nThis is why distributed systems are difficult even when every individual function looks simple. The uncertainty is between systems. A cron job may overlap, a process may restart, or a provider may answer slowly. A retry is not automatically a bug; an unexamined retry of a non-repeatable action is the bug."
+    },
+    {
+      "title": "2. The precise definition",
+      "body": "An operation is idempotent when applying the same operation more than once has the same intended effect as applying it once. In mathematical shorthand, an operation f is idempotent when f(f(x)) = f(x). In an API, the definition is about the intended server state, not necessarily identical response bodies, timestamps, logs, or status codes.\n\nFor example, setting a market's status to closed is naturally repeatable: the second identical request still leaves it closed. Adding one payout row is not repeatable if every execution creates another row. The second operation must either find the existing result and return it, or be rejected as a duplicate without applying the side effect again. Idempotency is not the same as 'no side effects', 'the request ran exactly once', or 'the response will be identical.'"
+    },
+    {
+      "title": "3. HTTP methods give clues, but application writes need more",
+      "body": "RFC 9110 defines GET, HEAD, OPTIONS, PUT, and DELETE as idempotent by their intended semantics. POST is not guaranteed to be idempotent: repeating POST /orders can create multiple orders. A server can still make a POST workflow safely retryable by accepting an idempotency key.\n\nThe client creates one unique key for one user intent, such as order-creation-8f2c. If the request must be retried, it sends the same key and the same payload. The server stores the key with the result. A repeat with the same key can return the stored result; a repeat with the same key but different parameters should be rejected, because reusing a key for a different intent would hide a real bug. A new order needs a new key. Never use an email address or another sensitive personal value as the key."
+    },
+    {
+      "title": "4. The database is the final guard",
+      "body": "An in-memory Set or Map can stop duplicates inside one process, but it disappears on restart and is not shared by two worker instances. A durable database constraint is stronger. A common pattern is a table with a unique key such as operation_key, or a unique business identity such as market_id, user_id, side. The first transaction inserts the marker; a concurrent retry hits the unique constraint and then reads the already-recorded result.\n\nThe ordering matters. If a payout is applied first and the deduplication marker is written later, a crash between those two steps can cause a second payout. Put the marker and the protected state change in one database transaction when both are in the same database. When an external provider is involved, one database transaction cannot include the provider call; use a durable outbox, a provider-supported idempotency key, or a reconciliation process, and document what happens in the gap."
+    },
+    {
+      "title": "5. How 383 uses the pattern",
+      "body": "The inspected 383 code contains several concrete applications. The live automation worker derives a five-minute bucket key such as tregu-live:<bucket>, checks market_automation_runs, and inserts a running row. If another worker wins the race, the losing worker rereads the row and returns an already-processed result. The pre-match refresh uses the same idea with a two-minute bucket.\n\nThe sport settlement function inserts into sport_market_settlements with ON CONFLICT DO NOTHING before adding coins and a transaction record. That unique settlement row acts as a durable claim: only the transaction that inserts it should perform the payout. The Telegram dispatcher uses telegram_posts as a recent-post ledger and a unique article_slug constraint. These are good examples to study because they also reveal the limitation: sending a Telegram message happens before the ledger insert, so a ledger failure after a successful send needs detection or reconciliation rather than wishful certainty."
+    },
+    {
+      "title": "6. Failure modes and an engineer's checklist",
+      "body": "Common mistakes are using a fresh random key on every retry, using one key for several different user intents, deduplicating only in process memory, assuming POST is safe because the network call returned an error, and marking an operation complete before the protected side effect really happened. Another mistake is saying exactly once when the system only provides at-most-once processing or best-effort deduplication.\n\nWhen reviewing a retryable workflow, ask: What is the business operation? What is its stable identity? Where is that identity stored durably? What happens when two workers race? What if the client loses the response after the side effect? Are the same key and payload reused on retry? How are old keys expired? What evidence lets an operator reconcile a provider success with a missing local ledger row? Answering those questions is more valuable than adding another catch block."
+    }
+  ],
+  "example": {
+    "language": "javascript",
+    "code": "const results = new Map();\nlet nextOrderId = 1;\n\nfunction createOrder(payload, idempotencyKey) {\n  if (!idempotencyKey) throw new Error(\"key required\");\n  const fingerprint = JSON.stringify(payload);\n  const previous = results.get(idempotencyKey);\n\n  if (previous) {\n    if (previous.fingerprint !== fingerprint) {\n      throw new Error(\"key reused for different payload\");\n    }\n    return { ...previous.result, replay: true };\n  }\n\n  const result = { orderId: `order-${nextOrderId++}`, status: \"accepted\" };\n  results.set(idempotencyKey, { fingerprint, result });\n  return { ...result, replay: false };\n}\n\nconsole.log(createOrder({ total: 10 }, \"checkout-abc\"));\nconsole.log(createOrder({ total: 10 }, \"checkout-abc\"));",
+    "explanation": "The first call creates one order and stores the request fingerprint plus result. The second call represents a retry after an uncertain network outcome; the same key and payload return the original order instead of creating order-2. The replay flag is only for learning. A real service would store this record in a durable database and make the insert and business write safe under concurrent requests. If the same key is reused with a different total, the function rejects it rather than silently attaching a new intent to an old result."
+  },
+  "diagram": {
+    "format": "mermaid",
+    "source": "sequenceDiagram\n  participant W as Cron or worker\n  participant D as Supabase database\n  participant P as External provider\n\n  W->>D: Derive and check stable operation key\n  alt Key already recorded\n    D-->>W: Existing result or running row\n    W-->>W: Skip duplicate side effect\n  else First claimant\n    W->>D: Insert key with unique constraint\n    alt Another worker won the race\n      D-->>W: Unique conflict\n      W->>D: Read existing row\n      D-->>W: Existing result\n    else This worker owns the operation\n      W->>P: Apply external side effect\n      P-->>W: Success, failure, or response lost\n      W->>D: Record result and finish audit\n    end\n  end",
+    "caption": "Trace the uncertain boundary: the provider may have acted even when the worker cannot read its response. The database key makes a repeated local attempt converge, but an external side effect still needs a provider key or reconciliation plan."
+  },
+  "sources": [
+    {
+      "id": "s1",
+      "title": "Idempotent requests | Stripe API Reference",
+      "publisher": "Stripe",
+      "url": "https://docs.stripe.com/api/idempotent_requests",
+      "factChecked": true,
+      "checkedAt": "2026-08-31T01:39:23+02:00",
+      "type": "official-docs",
+      "why": "Primary API documentation that explains reusing an idempotency key after a connection error, storing the first result, rejecting mismatched parameters, key lifetime, and why sensitive data should not be used as a key.",
+      "imageUrl": null,
+      "imageAlt": null
+    },
+    {
+      "id": "s2",
+      "title": "Timeouts, retries and backoff with jitter",
+      "publisher": "AWS Builders' Library",
+      "url": "https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/",
+      "factChecked": true,
+      "checkedAt": "2026-08-31T01:39:23+02:00",
+      "type": "official-docs",
+      "why": "Explains why remote calls fail partially, why a timeout does not prove that a side effect did not happen, and why retry policies should be paired with bounded timeouts, backoff, and idempotent APIs.",
+      "imageUrl": null,
+      "imageAlt": null
+    },
+    {
+      "id": "s3",
+      "title": "RFC 9110 - HTTP Semantics",
+      "publisher": "Internet Engineering Task Force",
+      "url": "https://datatracker.ietf.org/doc/rfc9110/",
+      "factChecked": true,
+      "checkedAt": "2026-08-31T01:39:23+02:00",
+      "type": "primary",
+      "why": "The HTTP standard's Section 9.2.2 defines idempotent methods as having the same intended effect when repeated and explains why they can be retried after a communication failure.",
+      "imageUrl": null,
+      "imageAlt": null
+    },
+    {
+      "id": "s4",
+      "title": "Idempotent - Glossary",
+      "publisher": "MDN Web Docs",
+      "url": "https://developer.mozilla.org/en-US/docs/Glossary/Idempotent",
+      "factChecked": true,
+      "checkedAt": "2026-08-31T01:39:23+02:00",
+      "type": "independent",
+      "why": "Provides beginner-friendly examples showing why GET, PUT, and DELETE are idempotent while repeated POST requests can add multiple rows, and clarifies that response codes may still differ.",
+      "imageUrl": null,
+      "imageAlt": null
+    }
+  ],
+  "claimChecks": [
+    {
+      "claim": "Idempotency means repeated identical requests have the same intended server effect as one request; it does not require identical responses or no logging.",
+      "sourceIds": ["s3", "s4"],
+      "status": "supported"
+    },
+    {
+      "claim": "GET, HEAD, OPTIONS, PUT, and DELETE are defined as idempotent HTTP methods, while POST is not guaranteed to be idempotent.",
+      "sourceIds": ["s3", "s4"],
+      "status": "supported"
+    },
+    {
+      "claim": "A lost response can leave the client unsure whether a remote side effect occurred, making an unprotected retry dangerous.",
+      "sourceIds": ["s1", "s2"],
+      "status": "supported"
+    },
+    {
+      "claim": "A server can store an idempotency key with the first result and reject later requests that reuse that key with different parameters.",
+      "sourceIds": ["s1"],
+      "status": "supported"
+    },
+    {
+      "claim": "Retries should be bounded and combined with timeouts and backoff because retries can increase load during an outage.",
+      "sourceIds": ["s2"],
+      "status": "supported"
+    }
+  ],
+  "video": {
+    "title": "The 3 Golden Rules of Distributed Systems",
+    "creator": "InfoQ",
+    "url": "https://www.youtube.com/watch?v=yebUpcBTdtQ",
+    "duration": "about 50 minutes (listed as 50:50)",
+    "why": "Sam Newman explains the distributed-systems failure patterns behind timeouts, retries, and idempotency. Watch the section on retry safety after completing the shorter lesson and exercise."
+  },
+  "videos": [
+    {
+      "title": "The 3 Golden Rules of Distributed Systems",
+      "creator": "InfoQ",
+      "url": "https://www.youtube.com/watch?v=yebUpcBTdtQ",
+      "duration": "about 50 minutes (listed as 50:50)",
+      "why": "Sam Newman explains the distributed-systems failure patterns behind timeouts, retries, and idempotency. Watch the section on retry safety after completing the shorter lesson and exercise."
+    }
+  ],
+  "quiz": [
+    {
+      "id": "q1",
+      "question": "What does idempotent mean for a server operation?",
+      "options": [
+        "It has no side effects at all",
+        "Repeating the same operation has the same intended effect as doing it once",
+        "It always returns the exact same JSON bytes",
+        "It can never fail"
+      ],
+      "correctIndex": 1,
+      "explanation": "Idempotency is about the intended effect on server state. Logs, timestamps, response codes, and failures may still differ."
+    },
+    {
+      "id": "q2",
+      "question": "Why can a timeout be dangerous for a non-idempotent POST request?",
+      "options": [
+        "A timeout proves the server rejected the request",
+        "The client cannot know whether the server acted before the response was lost",
+        "POST requests are never allowed to be retried",
+        "The network automatically sends the request twice"
+      ],
+      "correctIndex": 1,
+      "explanation": "The timeout reports what the client observed, not necessarily whether the server committed the side effect. A retry could create a duplicate."
+    },
+    {
+      "id": "q3",
+      "question": "What should a retry use after the first attempt has an uncertain outcome?",
+      "options": [
+        "A new idempotency key and a possibly changed payload",
+        "The same key and the same payload for the same intent",
+        "The user's email address as the key",
+        "No key, because retries are harmless"
+      ],
+      "correctIndex": 1,
+      "explanation": "The key identifies one intent across retries. A new intent needs a new key, and sensitive personal data should not be used as a key."
+    },
+    {
+      "id": "q4",
+      "question": "Why is a database unique constraint stronger than an in-memory Set for worker deduplication?",
+      "options": [
+        "It survives process restarts and coordinates concurrent workers",
+        "It makes external providers transactional automatically",
+        "It removes the need to inspect errors",
+        "It guarantees every request returns the same status code"
+      ],
+      "correctIndex": 0,
+      "explanation": "A durable constraint is shared and persistent. It still does not make an external provider call atomic with the database."
+    },
+    {
+      "id": "q5",
+      "question": "What is the important limitation in the Telegram dispatcher pattern inspected in 383?",
+      "options": [
+        "It never checks whether an article is fresh",
+        "It writes the ledger before sending, so messages cannot be delivered",
+        "It sends before inserting the ledger row, leaving a gap if the insert fails after a successful send",
+        "It uses GET to publish messages"
+      ],
+      "correctIndex": 2,
+      "explanation": "The code reads the ledger, sends the message, and then inserts the article slug. That prevents ordinary repeats but needs reconciliation for the send-success/ledger-failure gap."
+    }
+  ],
+  "review": {
+    "dateFirstLearned": "2026-08-31",
+    "lastReview": "2026-08-31",
+    "nextReview": "same day after completing the exercise",
+    "schedule": [
+      "Today: explain the lost-response problem without looking",
+      "2–3 days: classify three operations as idempotent or non-idempotent",
+      "1 week: trace a 383 run key and database constraint",
+      "3 weeks: design a retry-safe POST with a key and mismatch check",
+      "2 months: review the external-provider reconciliation gap"
+    ]
+  },
+  "reviewCard": {
+    "conceptName": "Idempotency",
+    "plainLanguageExplanation": "Doing the same intended operation again should not create an additional business effect.",
+    "technicalDefinition": "An operation is idempotent when multiple identical requests have the same intended effect on server state as one request.",
+    "relatedProjectOrBug": "383 automation run keys, sport settlement unique rows, and the Telegram article ledger.",
+    "dateFirstLearned": "2026-08-31",
+    "lastReviewDate": "2026-08-31",
+    "nextReviewDate": "same day after completing the exercise",
+    "quizScores": [],
+    "confidenceLevel": "not yet assessed",
+    "mistakesAndMisconceptions": [],
+    "exampleOrExercise": "Build a scratch function that returns the first result for the same key, rejects a changed payload, and explain what would happen if the process restarted.",
+    "sourceLinks": [
+      "https://docs.stripe.com/api/idempotent_requests",
+      "https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/",
+      "https://datatracker.ietf.org/doc/rfc9110/",
+      "https://developer.mozilla.org/en-US/docs/Glossary/Idempotent"
+    ]
+  }
+}
