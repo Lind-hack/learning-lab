@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">Learning Lab demo asset</title>
+  <desc id="desc">Abstract dark diagram of a lesson flowing into a quiz.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#111827"/><stop offset="1" stop-color="#0f172a"/></linearGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fb6b45"/><stop offset="1" stop-color="#70d6d0"/></linearGradient>
+  </defs>
+  <rect width="1200" height="675" fill="url(#bg)"/><circle cx="1040" cy="-20" r="250" fill="#fb6b45" opacity=".12"/><circle cx="80" cy="700" r="270" fill="#70d6d0" opacity=".09"/>
+  <path d="M140 480 C320 180 530 530 710 260 S940 160 1080 340" fill="none" stroke="url(#line)" stroke-width="8" stroke-linecap="round" opacity=".9"/>
+  <g fill="#f8fafc"><circle cx="140" cy="480" r="16"/><circle cx="410" cy="330" r="16"/><circle cx="710" cy="260" r="16"/><circle cx="930" cy="190" r="16"/><circle cx="1080" cy="340" r="16"/></g>
+  <g fill="#94a3b8" font-family="Arial, sans-serif" font-size="28" letter-spacing="3"><text x="92" y="565">LEARN</text><text x="642" y="140">TEST</text></g>
+</svg>
