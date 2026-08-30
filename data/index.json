@@ -1,1 +1,10 @@
-[]
+[
+  {
+    "id": "2026-08-31-idempotency-retries",
+    "isDemo": false,
+    "publishedAt": "2026-08-31T01:39:23+02:00",
+    "topic": "Idempotency: Making Retries Safe",
+    "difficulty": "foundation",
+    "estimatedMinutes": 20
+  }
+]
