@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Learning Lab — 383</title>
+  <style>
+    :root {
+      --bg: #0b0e13;
+      --bg-raised: #11161e;
+      --surface: #151c26;
+      --surface-soft: #1a2330;
+      --line: #293544;
+      --line-strong: #3a4859;
+      --ink: #f4f7fb;
+      --muted: #9aa8b8;
+      --dim: #6e7c8d;
+      --orange: #ff6b45;
+      --orange-soft: #ffb08e;
+      --teal: #72d5ce;
+      --green: #65d39c;
+      --yellow: #f4c56d;
+      --red: #f08a8a;
+      --serif: Georgia, 'Times New Roman', serif;
+      --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+      --shadow: 0 18px 50px rgba(0, 0, 0, .22);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background:
+        radial-gradient(circle at 84% 4%, rgba(255, 107, 69, .09), transparent 30rem),
+        radial-gradient(circle at 5% 32%, rgba(114, 213, 206, .055), transparent 28rem),
+        var(--bg);
+      color: var(--ink);
+      font-family: var(--sans);
+      line-height: 1.55;
+    }
+    button, a { font: inherit; }
+    a { color: var(--orange-soft); }
+    a:hover { color: #ffd0bd; }
+    :focus-visible { outline: 3px solid var(--teal); outline-offset: 3px; }
+    .hidden { display: none !important; }
+
+    .app-shell { width: min(1240px, calc(100% - 40px)); margin: 0 auto; padding: 22px 0 44px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 36px; }
+    .brand { display: inline-flex; align-items: center; gap: 12px; text-decoration: none; color: var(--ink); }
+    .brand-mark {
+      display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid rgba(255, 107, 69, .7);
+      border-radius: 12px; color: var(--orange); font-size: 13px; font-weight: 900; letter-spacing: -.5px;
+      box-shadow: 0 0 0 5px rgba(255, 107, 69, .07);
+    }
+    .brand-copy { display: grid; gap: 1px; }
+    .brand-name { font-size: 14px; font-weight: 800; letter-spacing: .02em; }
+    .brand-sub { color: var(--dim); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+    .live-status { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+    .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 5px rgba(101, 211, 156, .11); }
+    .live-dot.is-warn { background: var(--yellow); box-shadow: 0 0 0 5px rgba(244, 197, 109, .11); }
+
+    .hero { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 28px; align-items: stretch; margin-bottom: 28px; }
+    .hero-copy { padding: 28px 4px 24px; }
+    .eyebrow, .section-kicker { color: var(--orange); font-size: 11px; font-weight: 850; letter-spacing: .16em; text-transform: uppercase; }
+    .hero h1 { max-width: 800px; margin: 14px 0 16px; font: 800 clamp(2.4rem, 6vw, 5.2rem)/.96 var(--serif); letter-spacing: -.055em; text-wrap: balance; }
+    .hero-goal { max-width: 700px; margin: 0; color: var(--muted); font-size: clamp(1rem, 1.4vw, 1.18rem); line-height: 1.65; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+    .button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 8px; padding: 10px 15px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); color: var(--ink); cursor: pointer; text-decoration: none; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
+    .button:hover { border-color: var(--orange); background: var(--surface-soft); color: var(--ink); transform: translateY(-1px); }
+    .button.primary { border-color: var(--orange); background: var(--orange); color: #1d0d08; font-weight: 850; }
+    .button.primary:hover { background: #ff815f; border-color: #ff815f; color: #1d0d08; }
+    .button.ghost { background: transparent; }
+    .button:disabled { opacity: .55; cursor: wait; transform: none; }
+
+    .session-card { display: grid; align-content: center; gap: 18px; min-height: 260px; padding: 24px; border: 1px solid var(--line); background: linear-gradient(145deg, rgba(255,255,255,.035), rgba(255,255,255,.012)), var(--surface); box-shadow: var(--shadow); }
+    .session-label { color: var(--dim); font-size: 11px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
+    .progress-ring { --progress: 0%; width: 154px; height: 154px; display: grid; place-items: center; margin: 0 auto; border-radius: 50%; background: conic-gradient(var(--orange) var(--progress), #293544 var(--progress)); position: relative; }
+    .progress-ring::after { content: ''; position: absolute; inset: 9px; border-radius: 50%; background: var(--surface); }
+    .progress-value { position: relative; z-index: 1; font-size: 30px; font-weight: 850; letter-spacing: -.06em; }
+    .session-meta { display: grid; gap: 4px; text-align: center; }
+    .session-meta strong { font-size: 14px; }
+    .session-meta span { color: var(--dim); font-size: 12px; }
+
+    .demo-banner, .error-banner { margin: 0 0 24px; padding: 12px 15px; border: 1px solid rgba(244,197,109,.4); background: rgba(244,197,109,.09); color: #f8d99e; font-size: 13px; }
+    .error-banner { border-color: rgba(240,138,138,.45); background: rgba(240,138,138,.08); color: #ffc0c0; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 28px; align-items: start; }
+    .content-column { min-width: 0; }
+    .section-head { display: flex; align-items: end; justify-content: space-between; gap: 14px; margin: 0 0 14px; }
+    .section-head h2 { margin: 4px 0 0; font: 750 1.9rem/1.1 var(--serif); letter-spacing: -.035em; }
+    .section-head p { max-width: 470px; margin: 0; color: var(--muted); font-size: 13px; text-align: right; }
+    .lesson-section { margin-top: 38px; scroll-margin-top: 20px; }
+    .lesson-section > h2 { margin: 0 0 12px; font: 750 1.9rem/1.1 var(--serif); letter-spacing: -.035em; }
+    .lesson-section > p, .text-block { color: #c5cfda; font-size: 15px; line-height: 1.78; }
+    .text-block { margin: 0 0 14px; }
+    .text-block:last-child { margin-bottom: 0; }
+
+    .signal-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
+    .signal-card { min-height: 154px; padding: 16px; border: 1px solid var(--line); background: rgba(21,28,38,.78); }
+    .signal-card.known { border-top: 2px solid var(--teal); }
+    .signal-card.inference { border-top: 2px solid var(--orange); }
+    .signal-card.uncertainty { border-top: 2px solid var(--yellow); }
+    .signal-card.test { border-top: 2px solid var(--green); }
+    .signal-label { margin-bottom: 10px; color: var(--dim); font-size: 10px; font-weight: 850; letter-spacing: .13em; text-transform: uppercase; }
+    .signal-card p { margin: 0; color: #cbd5df; font-size: 13px; line-height: 1.62; }
+    .context-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(240px, .75fr); gap: 12px; }
+    .context-card { padding: 20px 21px; border: 1px solid var(--line); background: var(--surface); }
+    .context-card.primary { border-top: 2px solid var(--teal); }
+    .context-card.secondary { border-top: 2px solid var(--orange); }
+    .context-card h3 { margin: 0 0 8px; font-size: 16px; line-height: 1.4; }
+    .context-card p { margin: 0; color: #c5cfda; font-size: 14px; line-height: 1.7; }
+    .project-strip { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+    .project-strip strong { display: block; margin-bottom: 4px; color: var(--teal); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; }
+    .project-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .project-file { padding: 4px 7px; border: 1px solid var(--line-strong); color: var(--muted); font: 11px var(--mono); }
+
+    .section-list { display: grid; gap: 16px; }
+    .lesson-block { padding: 21px 22px; border-left: 2px solid var(--line-strong); background: linear-gradient(90deg, rgba(255,255,255,.035), transparent); }
+    .lesson-block h3 { margin: 0 0 9px; color: var(--ink); font-size: 16px; letter-spacing: -.01em; }
+    .lesson-block p { margin: 0; }
+
+    .code-card, .diagram-card { overflow: hidden; border: 1px solid var(--line); background: #0e131a; }
+    .code-head { display: flex; justify-content: space-between; gap: 12px; padding: 11px 15px; border-bottom: 1px solid var(--line); color: var(--dim); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    pre { margin: 0; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+    .code-card pre, .diagram-card pre { padding: 18px; color: #dfe9f2; font: 13px/1.68 var(--mono); }
+    .code-card pre { color: #ffd0bd; }
+    .example-note, .diagram-caption { margin: 0; padding: 13px 17px 17px; color: var(--muted); font-size: 13px; }
+    .diagram-card { background: #101820; }
+    .diagram-card pre { color: #b9ebe7; }
+
+    .source-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+    .source-card { overflow: hidden; border: 1px solid var(--line); background: var(--surface); }
+    .source-image { display: block; width: 100%; aspect-ratio: 16/8; object-fit: cover; border-bottom: 1px solid var(--line); background: #0d141b; }
+    .source-body { padding: 16px; }
+    .source-topline { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+    .source-badge { display: inline-flex; padding: 4px 7px; border: 1px solid var(--line-strong); border-radius: 999px; color: var(--muted); font-size: 10px; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; }
+    .source-badge.verified { border-color: rgba(101,211,156,.45); color: var(--green); }
+    .source-publisher { color: var(--dim); font-size: 11px; }
+    .source-card h3 { margin: 0 0 7px; font-size: 15px; line-height: 1.35; }
+    .source-card p { margin: 0 0 12px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+    .source-link { font-size: 12px; font-weight: 800; }
+    .video-list { display: grid; gap: 12px; }
+    .video-card { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 14px; align-items: start; padding: 17px; border: 1px solid var(--line); background: var(--surface); }
+    .video-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: rgba(255,107,69,.14); color: var(--orange); font-size: 16px; }
+    .video-card h3 { margin: 0 0 4px; font-size: 15px; }
+    .video-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.52; }
+    .video-meta { color: var(--dim); font-size: 11px; white-space: nowrap; }
+
+    .quiz-shell { border: 1px solid var(--line-strong); background: linear-gradient(145deg, rgba(114,213,206,.055), rgba(255,107,69,.045)), var(--surface); }
+    .quiz-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; padding: 20px 21px; border-bottom: 1px solid var(--line); }
+    .quiz-head h2 { margin: 4px 0 0; font: 750 1.9rem/1.1 var(--serif); letter-spacing: -.035em; }
+    .quiz-head p { margin: 0; color: var(--muted); font-size: 13px; text-align: right; }
+    .quiz-list { display: grid; gap: 1px; background: var(--line); }
+    .quiz-question { padding: 19px 21px; background: var(--surface); }
+    .quiz-question h3 { margin: 0 0 13px; font-size: 15px; line-height: 1.45; }
+    .option-list { display: grid; gap: 8px; }
+    .option { display: flex; align-items: flex-start; gap: 10px; width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); background: var(--bg-raised); color: #cbd5df; text-align: left; cursor: pointer; }
+    .option:hover { border-color: var(--line-strong); color: var(--ink); }
+    .option.selected { border-color: var(--orange); background: rgba(255,107,69,.1); color: var(--ink); }
+    .option.correct { border-color: var(--green); background: rgba(101,211,156,.1); color: #d7ffe8; }
+    .option.incorrect { border-color: var(--red); background: rgba(240,138,138,.09); color: #ffd5d5; }
+    .option-index { display: inline-grid; place-items: center; flex: 0 0 22px; height: 22px; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--dim); font-size: 11px; font-weight: 850; }
+    .option.selected .option-index { border-color: var(--orange); color: var(--orange-soft); }
+    .question-feedback { margin: 11px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .question-feedback.good { color: var(--green); }
+    .question-feedback.bad { color: var(--red); }
+    .quiz-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 17px 21px; border-top: 1px solid var(--line); }
+    .score-text { color: var(--muted); font-size: 13px; }
+    .quiz-feedback { width: 100%; margin: 0; color: var(--orange-soft); font-size: 13px; }
+
+    .sidebar { position: sticky; top: 18px; display: grid; gap: 14px; }
+    .side-card { padding: 17px; border: 1px solid var(--line); background: rgba(17,22,30,.72); }
+    .side-card h2 { margin: 0 0 13px; color: var(--ink); font-size: 12px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+    .session-nav { display: grid; gap: 2px; }
+    .session-nav a { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; color: var(--muted); font-size: 13px; text-decoration: none; border-bottom: 1px solid rgba(41,53,68,.55); }
+    .session-nav a:last-child { border-bottom: 0; }
+    .session-nav a:hover { color: var(--ink); }
+    .session-nav span { color: var(--dim); font-size: 11px; }
+    .review-list, .history-list { display: grid; gap: 9px; }
+    .review-item { display: grid; grid-template-columns: 10px minmax(0,1fr); gap: 9px; align-items: start; }
+    .review-marker { width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--orange); }
+    .review-item p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.48; }
+    .review-item strong { display: block; margin-bottom: 2px; color: var(--ink); font-size: 12px; }
+    .history-empty { margin: 0; color: var(--dim); font-size: 12px; line-height: 1.55; }
+    .history-button { width: 100%; padding: 9px 0; border: 0; border-bottom: 1px solid rgba(41,53,68,.55); background: transparent; color: var(--muted); text-align: left; cursor: pointer; }
+    .history-button:hover { color: var(--ink); }
+    .history-button strong { display: block; font-size: 12px; }
+    .history-button span { display: block; margin-top: 2px; color: var(--dim); font-size: 11px; }
+
+    footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 42px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--dim); font-size: 11px; }
+    .empty-state { padding: 36px 0; color: var(--muted); }
+
+    @media (max-width: 920px) {
+      .hero, .layout { grid-template-columns: 1fr; }
+      .session-card { grid-template-columns: auto 1fr; min-height: auto; align-items: center; }
+      .session-label { grid-column: 1 / -1; }
+      .progress-ring { grid-row: span 2; }
+      .session-meta { text-align: left; }
+      .sidebar { position: static; grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+    @media (max-width: 640px) {
+      .app-shell { width: min(100% - 24px, 1240px); padding-top: 14px; }
+      .topbar { margin-bottom: 20px; }
+      .live-status { font-size: 0; }
+      .hero-copy { padding-top: 16px; }
+      .hero h1 { font-size: clamp(2.45rem, 14vw, 4rem); }
+      .signal-grid, .source-grid, .sidebar { grid-template-columns: 1fr; }
+      .section-head, .quiz-head { display: block; }
+      .section-head p, .quiz-head p { margin-top: 8px; text-align: left; }
+      .lesson-block { padding: 17px; }
+      .video-card { grid-template-columns: auto minmax(0,1fr); }
+      .video-meta { grid-column: 2; }
+      footer { display: block; }
+      footer span { display: block; margin-top: 6px; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#top" aria-label="Learning Lab home">
+        <span class="brand-mark">383</span>
+        <span class="brand-copy"><span class="brand-name">Learning Lab</span><span class="brand-sub">Computer science, applied</span></span>
+      </a>
+      <div class="live-status" aria-live="polite"><span id="liveDot" class="live-dot"></span><span id="liveStatus">Connecting to today's lesson…</span></div>
+    </header>
+
+    <section id="top" class="hero" aria-labelledby="lessonTopic">
+      <div class="hero-copy">
+        <div class="eyebrow">Today's session</div>
+        <h1 id="lessonTopic">Loading lesson…</h1>
+        <p id="lessonGoal" class="hero-goal">The lab is loading a structured lesson with evidence, examples, and a live quiz.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="#quiz">Start the quiz <span aria-hidden="true">↘</span></a>
+          <button id="refreshBtn" class="button ghost" type="button">Refresh lesson</button>
+        </div>
+      </div>
+      <aside class="session-card" aria-label="Quiz progress">
+        <div class="session-label">Session progress</div>
+        <div id="progressRing" class="progress-ring" role="img" aria-label="0 percent answered"><span id="progressValue" class="progress-value">0%</span></div>
+        <div class="session-meta"><strong id="progressLabel">0 / 0 answered</strong><span id="updatedLabel">Waiting for lesson data</span></div>
+      </aside>
+    </section>
+
+    <div id="demoBanner" class="demo-banner hidden" role="status"></div>
+    <div id="errorBanner" class="error-banner hidden" role="alert"></div>
+
+    <div class="layout">
+      <section class="content-column">
+        <section id="overview" aria-labelledby="overviewTitle">
+          <div class="section-head"><div><div class="section-kicker">Orientation</div><h2 id="overviewTitle">How to read this session</h2></div><p>Separate evidence from interpretation before you decide what you believe.</p></div>
+          <div class="signal-grid">
+            <article class="signal-card known"><div class="signal-label">Known</div><p id="knownText">—</p></article>
+            <article class="signal-card inference"><div class="signal-label">Inference</div><p id="inferenceText">—</p></article>
+            <article class="signal-card uncertainty"><div class="signal-label">Uncertainty</div><p id="uncertaintyText">—</p></article>
+            <article class="signal-card test"><div class="signal-label">What to test</div><p id="testText">—</p></article>
+          </div>
+        </section>
+
+        <section id="context" class="lesson-section" aria-labelledby="contextTitle">
+          <div class="section-head"><div><div class="section-kicker">Context</div><h2 id="contextTitle">Why this matters now</h2></div><p>Start with the event, then learn the mechanism underneath it.</p></div>
+          <div class="context-grid">
+            <article class="context-card primary"><h3 id="newsHeadline">—</h3><p id="newsSummary">—</p><div class="project-strip"><strong>383 connection</strong><p id="projectExplanation">—</p><div id="projectFiles" class="project-files"></div></div></article>
+            <article class="context-card secondary"><h3>Why it exposes the concept</h3><p id="newsWhy">—</p></article>
+          </div>
+          <p id="whyNow" class="text-block" style="margin-top:14px">—</p>
+        </section>
+
+        <section id="explanation" class="lesson-section" aria-labelledby="explanationTitle">
+          <div class="section-head"><div><div class="section-kicker">Core lesson</div><h2 id="explanationTitle">Understand the idea</h2></div><p id="lessonMeta">—</p></div>
+          <div id="sectionList" class="section-list"><div class="empty-state">Loading explanation…</div></div>
+        </section>
+
+        <section id="example" class="lesson-section" aria-labelledby="exampleTitle">
+          <div class="section-head"><div><div class="section-kicker">Apply it</div><h2 id="exampleTitle">A small example</h2></div></div>
+          <div class="code-card"><div class="code-head"><span id="exampleLanguage">code</span><span>read → predict → run</span></div><pre id="exampleCode">Loading example…</pre><p id="exampleExplanation" class="example-note">—</p></div>
+        </section>
+
+        <section id="diagram" class="lesson-section" aria-labelledby="diagramTitle">
+          <div class="section-head"><div><div class="section-kicker">See the flow</div><h2 id="diagramTitle">System picture</h2></div></div>
+          <div class="diagram-card"><div class="code-head"><span id="diagramFormat">diagram</span><span>trace the data</span></div><pre id="diagramSource">Loading diagram…</pre><p id="diagramCaption" class="diagram-caption">—</p></div>
+        </section>
+
+        <section id="sources" class="lesson-section" aria-labelledby="sourcesTitle">
+          <div class="section-head"><div><div class="section-kicker">Evidence desk</div><h2 id="sourcesTitle">Sources and images</h2></div><p>Only sources that the scheduled run could verify should appear here.</p></div>
+          <div id="sourceGrid" class="source-grid"><div class="empty-state">Loading sources…</div></div>
+        </section>
+
+        <section id="videos" class="lesson-section" aria-labelledby="videosTitle">
+          <div class="section-head"><div><div class="section-kicker">Go deeper</div><h2 id="videosTitle">One visual explanation</h2></div></div>
+          <div id="videoList" class="video-list"><div class="empty-state">Loading video recommendation…</div></div>
+        </section>
+
+        <section id="quiz" class="lesson-section" aria-labelledby="quizTitle">
+          <div class="quiz-shell">
+            <div class="quiz-head"><div><div class="section-kicker">Active recall</div><h2 id="quizTitle">Test yourself</h2></div><p>Answer first. Explanations appear only after you check.</p></div>
+            <div id="quizList" class="quiz-list"><div class="empty-state">Loading quiz…</div></div>
+            <div class="quiz-actions"><button id="checkBtn" class="button primary" type="button">Check answers</button><button id="resetBtn" class="button ghost" type="button">Reset</button><span id="scoreText" class="score-text">No attempt saved yet.</span><p id="quizFeedback" class="quiz-feedback" aria-live="polite"></p></div>
+          </div>
+        </section>
+      </section>
+
+      <aside class="sidebar" aria-label="Session navigation and review">
+        <section class="side-card"><h2>Session map</h2><nav id="sessionNav" class="session-nav"><a href="#overview">Orientation <span>01</span></a><a href="#context">Context <span>02</span></a><a href="#explanation">Core lesson <span>03</span></a><a href="#example">Example <span>04</span></a><a href="#diagram">System picture <span>05</span></a><a href="#sources">Evidence <span>06</span></a><a href="#quiz">Quiz <span>07</span></a></nav></section>
+        <section class="side-card"><h2>Review cadence</h2><div id="reviewList" class="review-list"><p class="history-empty">Loading review plan…</p></div></section>
+        <section class="side-card"><h2>Previous sessions</h2><div id="historyList" class="history-list"><p class="history-empty">Loading history…</p></div></section>
+      </aside>
+    </div>
+
+    <footer><span>Learning Lab · local, interactive, evidence-aware</span><span id="footerState">The quiz score stays in this browser.</span></footer>
+  </main>
+
+  <script>
+    (() => {
+      'use strict';
+      const state = { lesson: null, selected: {}, checked: false, score: null, loading: false };
+      const $ = (id) => document.getElementById(id);
+      const progressKey = () => state.lesson ? `learning-lab.progress.${state.lesson.id}` : '';
+
+      function text(id, value, fallback = '—') { const node = $(id); if (node) node.textContent = value == null || value === '' ? fallback : String(value); }
+      function clear(node) { while (node && node.firstChild) node.removeChild(node.firstChild); }
+      function setHidden(id, hidden) { const node = $(id); if (node) node.classList.toggle('hidden', hidden); }
+      function safeUrl(value) {
+        if (!value || typeof value !== 'string') return null;
+        try {
+          const url = new URL(value, window.location.href);
+          if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+          return url.href;
+        } catch (_) { return null; }
+      }
+      function formatDate(value) {
+        if (!value) return '—';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return String(value);
+        return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+      }
+      function addTextBlocks(parent, raw) {
+        const pieces = String(raw || '').split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean);
+        if (!pieces.length) { const p = document.createElement('p'); p.className = 'text-block'; p.textContent = '—'; parent.appendChild(p); return; }
+        pieces.forEach((part) => { const p = document.createElement('p'); p.className = 'text-block'; p.textContent = part; parent.appendChild(p); });
+      }
+      function loadProgress() {
+        state.selected = {}; state.checked = false; state.score = null;
+        if (!progressKey()) return;
+        try {
+          const saved = JSON.parse(localStorage.getItem(progressKey()) || '{}');
+          if (saved && typeof saved === 'object') { state.selected = saved.selected || {}; state.checked = saved.checked === true; state.score = Number.isFinite(saved.score) ? saved.score : null; }
+        } catch (_) { /* Ignore stale/corrupt browser-only progress. */ }
+      }
+      function saveProgress() {
+        if (!progressKey()) return;
+        try { localStorage.setItem(progressKey(), JSON.stringify({ selected: state.selected, checked: state.checked, score: state.score, savedAt: new Date().toISOString() })); } catch (_) { /* Browser storage may be unavailable. */ }
+      }
+      function updateProgress() {
+        const questions = Array.isArray(state.lesson?.quiz) ? state.lesson.quiz : [];
+        const answered = questions.filter((q) => state.selected[q.id] !== undefined).length;
+        const pct = questions.length ? Math.round(answered / questions.length * 100) : 0;
+        const ring = $('progressRing');
+        if (ring) { ring.style.setProperty('--progress', `${pct}%`); ring.setAttribute('aria-label', `${pct} percent answered`); }
+        text('progressValue', `${pct}%`); text('progressLabel', `${answered} / ${questions.length} answered`);
+        if (state.checked && state.score !== null) text('scoreText', `Score: ${state.score} / ${questions.length}`);
+      }
+      function optionLabel(index) { return String.fromCharCode(65 + index); }
+
+      function renderQuiz() {
+        const list = $('quizList'); clear(list);
+        const questions = Array.isArray(state.lesson?.quiz) ? state.lesson.quiz : [];
+        if (!questions.length) { const p = document.createElement('p'); p.className = 'empty-state'; p.textContent = 'No quiz was supplied for this lesson.'; list.appendChild(p); updateProgress(); return; }
+        questions.forEach((question, questionIndex) => {
+          const card = document.createElement('article'); card.className = 'quiz-question';
+          const heading = document.createElement('h3'); heading.textContent = `${questionIndex + 1}. ${question.question || 'Question'}`; card.appendChild(heading);
+          const options = document.createElement('div'); options.className = 'option-list';
+          (Array.isArray(question.options) ? question.options : []).forEach((rawOption, optionIndex) => {
+            const label = typeof rawOption === 'object' && rawOption !== null ? rawOption.label : rawOption;
+            const button = document.createElement('button'); button.type = 'button'; button.className = 'option';
+            if (state.selected[question.id] === optionIndex) button.classList.add('selected');
+            const badge = document.createElement('span'); badge.className = 'option-index'; badge.textContent = optionLabel(optionIndex);
+            const value = document.createElement('span'); value.textContent = label == null ? '' : String(label);
+            button.append(badge, value);
+            button.addEventListener('click', () => { state.selected[question.id] = optionIndex; state.checked = false; state.score = null; saveProgress(); renderQuiz(); updateProgress(); });
+            if (state.checked) {
+              if (optionIndex === Number(question.correctIndex)) button.classList.add('correct');
+              else if (state.selected[question.id] === optionIndex) button.classList.add('incorrect');
+            }
+            options.appendChild(button);
+          });
+          card.appendChild(options);
+          if (state.checked && state.selected[question.id] !== undefined) {
+            const feedback = document.createElement('p'); feedback.className = 'question-feedback';
+            const correct = Number(state.selected[question.id]) === Number(question.correctIndex);
+            feedback.classList.add(correct ? 'good' : 'bad');
+            feedback.textContent = `${correct ? 'Correct.' : 'Not quite.'} ${question.explanation || ''}`.trim();
+            card.appendChild(feedback);
+          }
+          list.appendChild(card);
+        });
+        updateProgress();
+      }
+      function checkQuiz() {
+        const questions = Array.isArray(state.lesson?.quiz) ? state.lesson.quiz : [];
+        let score = 0; let unanswered = 0;
+        questions.forEach((question) => { if (state.selected[question.id] === undefined) unanswered += 1; else if (Number(state.selected[question.id]) === Number(question.correctIndex)) score += 1; });
+        state.score = score; state.checked = true; saveProgress(); renderQuiz();
+        text('scoreText', `Score: ${score} / ${questions.length}`);
+        text('quizFeedback', unanswered ? `${unanswered} question${unanswered === 1 ? '' : 's'} still unanswered. You can change answers and check again.` : (score === questions.length ? 'Excellent. Explain the concept once more without looking.' : 'Review the explanations, then retry the questions you missed.'));
+      }
+      function renderSources() {
+        const grid = $('sourceGrid'); clear(grid);
+        const sources = Array.isArray(state.lesson?.sources) ? state.lesson.sources : [];
+        if (!sources.length) { const p = document.createElement('p'); p.className = 'empty-state'; p.textContent = 'No verified source was supplied.'; grid.appendChild(p); return; }
+        sources.forEach((source) => {
+          const card = document.createElement('article'); card.className = 'source-card';
+          const imageUrl = safeUrl(source.imageUrl);
+          if (imageUrl) { const img = document.createElement('img'); img.className = 'source-image'; img.src = imageUrl; img.alt = source.imageAlt || `Visual from ${source.publisher || 'source'}`; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer'; img.addEventListener('error', () => img.remove()); card.appendChild(img); }
+          const body = document.createElement('div'); body.className = 'source-body';
+          const topline = document.createElement('div'); topline.className = 'source-topline';
+          const badge = document.createElement('span'); badge.className = `source-badge${source.factChecked ? ' verified' : ''}`; badge.textContent = source.factChecked ? 'Fact checked' : 'Reference';
+          const publisher = document.createElement('span'); publisher.className = 'source-publisher'; publisher.textContent = source.publisher || 'Publisher not supplied'; topline.append(badge, publisher); body.appendChild(topline);
+          const heading = document.createElement('h3'); heading.textContent = source.title || 'Untitled source'; body.appendChild(heading);
+          const why = document.createElement('p'); why.textContent = source.why || 'No relevance note supplied.'; body.appendChild(why);
+          const url = safeUrl(source.url); if (url) { const link = document.createElement('a'); link.className = 'source-link'; link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Open source ↗'; body.appendChild(link); }
+          card.appendChild(body); grid.appendChild(card);
+        });
+      }
+      function renderVideos() {
+        const list = $('videoList'); clear(list);
+        const videos = Array.isArray(state.lesson?.videos) ? state.lesson.videos : (state.lesson?.video ? [state.lesson.video] : []);
+        if (!videos.length) { const p = document.createElement('p'); p.className = 'empty-state'; p.textContent = 'No verified video was supplied for this lesson.'; list.appendChild(p); return; }
+        videos.forEach((video) => {
+          const card = document.createElement('article'); card.className = 'video-card';
+          const mark = document.createElement('div'); mark.className = 'video-mark'; mark.setAttribute('aria-hidden', 'true'); mark.textContent = '▶'; card.appendChild(mark);
+          const body = document.createElement('div'); const heading = document.createElement('h3'); heading.textContent = video.title || 'Video recommendation'; body.appendChild(heading); const copy = document.createElement('p'); copy.textContent = `${video.creator || 'Creator not supplied'} — ${video.why || 'Watch for a deeper explanation.'}`; body.appendChild(copy); card.appendChild(body);
+          const meta = document.createElement('div'); meta.className = 'video-meta'; meta.textContent = video.duration || 'Duration unknown'; const url = safeUrl(video.url); if (url) { const link = document.createElement('a'); link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = 'Watch ↗'; link.style.display = 'block'; meta.appendChild(link); } card.appendChild(meta); list.appendChild(card);
+        });
+      }
+      function renderLesson() {
+        const lesson = state.lesson; if (!lesson) return;
+        document.title = `${lesson.topic || 'Lesson'} — Learning Lab`;
+        text('lessonTopic', lesson.topic, 'Untitled lesson'); text('lessonGoal', lesson.learningGoal, 'No learning goal supplied.');
+        text('knownText', lesson.known); text('inferenceText', lesson.inference); text('uncertaintyText', lesson.uncertainty); text('testText', lesson.test);
+        text('newsHeadline', lesson.newsContext?.headline || 'No current news context supplied'); text('newsSummary', lesson.newsContext?.summary || 'The lesson uses a verified technical source instead of a news event.'); text('newsWhy', lesson.newsContext?.whyItMatters || lesson.whyNow || '—'); text('whyNow', lesson.whyNow || '—'); text('projectExplanation', lesson.projectConnection?.explanation || 'No direct 383 connection supplied.');
+        const projectFiles = $('projectFiles'); clear(projectFiles); (Array.isArray(lesson.projectConnection?.files) ? lesson.projectConnection.files : []).forEach((file) => { const chip = document.createElement('span'); chip.className = 'project-file'; chip.textContent = file; projectFiles.appendChild(chip); });
+        text('lessonMeta', `${lesson.difficulty || 'foundation'} · ${lesson.estimatedMinutes || '—'} min · ${formatDate(lesson.publishedAt)}`);
+        setHidden('demoBanner', !lesson.isDemo); if (lesson.isDemo) text('demoBanner', 'DEMO CONTENT: this seed lesson verifies the dashboard. The next researched cron run will replace it.');
+        const sections = $('sectionList'); clear(sections); (Array.isArray(lesson.sections) ? lesson.sections : []).forEach((section) => { const article = document.createElement('article'); article.className = 'lesson-block'; const heading = document.createElement('h3'); heading.textContent = section.title || 'Section'; article.appendChild(heading); addTextBlocks(article, section.body); sections.appendChild(article); });
+        if (!sections.childElementCount) { const p = document.createElement('p'); p.className = 'empty-state'; p.textContent = 'No explanation sections supplied.'; sections.appendChild(p); }
+        text('exampleLanguage', lesson.example?.language || 'code'); text('exampleCode', lesson.example?.code, 'No example supplied.'); text('exampleExplanation', lesson.example?.explanation);
+        text('diagramFormat', lesson.diagram?.format || 'diagram'); text('diagramSource', lesson.diagram?.source, 'No diagram supplied.'); text('diagramCaption', lesson.diagram?.caption);
+        renderSources(); renderVideos(); renderQuiz();
+        const review = $('reviewList'); clear(review); const schedule = Array.isArray(lesson.review?.schedule) ? lesson.review.schedule : []; schedule.forEach((item, index) => { const row = document.createElement('div'); row.className = 'review-item'; const dot = document.createElement('span'); dot.className = 'review-marker'; const copy = document.createElement('p'); const strong = document.createElement('strong'); strong.textContent = index === 0 ? 'Next review' : `Review ${index}`; const detail = document.createElement('span'); detail.textContent = item; copy.append(strong, detail); row.append(dot, copy); review.appendChild(row); }); if (!schedule.length) { const p = document.createElement('p'); p.className = 'history-empty'; p.textContent = lesson.review?.nextReview || 'No review schedule supplied.'; review.appendChild(p); }
+        updateProgress();
+      }
+      async function loadHistory() {
+        const list = $('historyList');
+        try {
+          const response = await fetch(`/data/index.json?ts=${Date.now()}`, { cache: 'no-store' }); if (!response.ok) throw new Error('history unavailable'); const items = await response.json(); clear(list);
+          if (!Array.isArray(items) || !items.length) { const p = document.createElement('p'); p.className = 'history-empty'; p.textContent = 'No archived sessions yet.'; list.appendChild(p); return; }
+          items.slice(0, 8).forEach((item) => { const button = document.createElement('button'); button.type = 'button'; button.className = 'history-button'; const strong = document.createElement('strong'); strong.textContent = item.topic || item.id || 'Previous lesson'; const span = document.createElement('span'); span.textContent = `${item.difficulty || 'foundation'} · ${formatDate(item.publishedAt)}`; button.append(strong, span); button.addEventListener('click', () => loadLesson(`/data/history/${encodeURIComponent(item.id)}.json`)); list.appendChild(button); });
+        } catch (_) { clear(list); const p = document.createElement('p'); p.className = 'history-empty'; p.textContent = 'History will appear after the first daily run.'; list.appendChild(p); }
+      }
+      async function loadLesson(url = '/data/latest.json') {
+        if (state.loading) return; state.loading = true; $('refreshBtn').disabled = true; setHidden('errorBanner', true); text('liveStatus', 'Loading lesson…'); $('liveDot').classList.remove('is-warn');
+        try {
+          const response = await fetch(`${url}${url.includes('?') ? '&' : '?'}ts=${Date.now()}`, { cache: 'no-store' }); if (!response.ok) throw new Error(`Lesson request returned ${response.status}`); const next = await response.json(); if (!next || !next.id) throw new Error('Lesson JSON has no id'); const changed = state.lesson && state.lesson.id !== next.id; state.lesson = next; if (changed || !state.selected) loadProgress(); else loadProgress(); renderLesson(); text('updatedLabel', `Updated ${formatDate(next.publishedAt)}`); text('liveStatus', next.isDemo ? 'Demo lesson loaded' : 'Live lesson loaded'); loadHistory();
+        } catch (error) { $('liveDot').classList.add('is-warn'); text('liveStatus', 'Waiting for the next lesson'); text('errorBanner', `The lab could not load lesson data: ${error.message}`); setHidden('errorBanner', false); }
+        finally { state.loading = false; $('refreshBtn').disabled = false; }
+      }
+      $('checkBtn').addEventListener('click', checkQuiz); $('resetBtn').addEventListener('click', () => { state.selected = {}; state.checked = false; state.score = null; saveProgress(); text('quizFeedback', ''); text('scoreText', 'No attempt saved yet.'); renderQuiz(); }); $('refreshBtn').addEventListener('click', () => loadLesson());
+      loadLesson(); loadHistory(); window.setInterval(() => loadLesson(), 30000);
+    })();
+  </script>
+</body>
+</html>
