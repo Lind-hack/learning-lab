@@ -1,0 +1,256 @@
+{
+  "id": "2026-08-31-react-async-race-cleanup",
+  "isDemo": false,
+  "publishedAt": "2026-08-31T02:06:43+02:00",
+  "topic": "Async Race Conditions in React: Let Only Current Data Win",
+  "difficulty": "foundation",
+  "estimatedMinutes": 20,
+  "newsContext": {
+    "headline": "Official technical context: React Effects need cleanup when they synchronize with external systems",
+    "summary": "No current incident is used because a current incident could not be responsibly verified from primary and independent reports in this run. The lesson uses official React and MDN documentation plus an independent walkthrough to teach a recurring production bug: overlapping asynchronous requests can finish out of order.",
+    "whyItMatters": "A delayed request is not automatically wrong, but an old response overwriting newer UI state can make a page show facts for the wrong market or route."
+  },
+  "learningGoal": "By the end of this lesson, you should be able to draw the timeline of two overlapping fetches, explain why the last response is not necessarily the newest request, and choose a cleanup or latest-request guard for a React data load.",
+  "whyNow": "Read-only inspection of the 383 market detail page shows that load is called on mount, after trades, on a fixed interval, and when a stale tab becomes visible. The same load starts a market-detail fetch and a separate hub fetch, while the detail API fans out to several database reads with Promise.all. The page cleans up its timer, but the fetches have no visible AbortController or request-generation guard. This makes async race conditions the best next foundation before changing polling or UI state code.",
+  "known": "Known from the inspected working tree: app/tregu/[slug]/page.tsx is a client component with many useState values; load calls fetch for the detail URL and for the all-markets hub URL; an Effect calls load and another Effect calls window.setInterval(load, autoRefreshMs); the interval Effect clears the interval and removes the visibility listener on cleanup. Known from app/api/tregu/markets/[slug]/route.ts: the GET handler uses Promise.all for snapshots, trades, activity, related markets, holders, and comments, then performs more reads before returning one JSON response. Known from lib/tregu-market-detail.test.mjs: tests cover market-detail derivations and realtime fallback behavior, but they do not prove that overlapping page fetches are race-safe.",
+  "inference": "Inference: if one page load is pending when a later load begins, either response can arrive first. The visible page code sets state from each response without a visible AbortController or request-id check, so an older response could overwrite newer state in that window. This is a review finding, not proof that the deployed page currently exhibits the bug.",
+  "uncertainty": "Uncertainty: source inspection cannot tell us the real latency distribution, whether the overlap is observable in the deployed build, or how navigation affects component lifetime. It also cannot prove that aborting a browser fetch stops server-side work already accepted by the API. Those points require an isolated browser test and operational evidence.",
+  "test": "In a dedicated scratch page, make request A take 500 ms and request B take 50 ms. Start A, then start B after 10 ms. Predict which result naive code renders. Add either a request-id guard or AbortController cleanup and observe the difference. Separately identify every place that can call load in the 383 page. Do not test against production or a real account.",
+  "projectConnection": {
+    "files": [
+      "app/tregu/[slug]/page.tsx",
+      "app/api/tregu/markets/[slug]/route.ts",
+      "lib/tregu-market-detail.test.mjs"
+    ],
+    "explanation": "The browser market-detail page keeps market, snapshots, trades, positions, football data, and other values in React state. Its load function requests current market detail and separately requests all hub markets so grouped events can be shown. Initial loading, post-trade refresh, the two-minute sport or five-minute non-sport interval, and a visibility refresh can all initiate loads. The API route performs multiple independent Supabase reads concurrently with Promise.all and returns a combined JSON model. Concurrency reduces waiting, but the page still needs a rule for which response may commit state. A common rule is latest request wins: an older response may finish, but it must be ignored or cancelled."
+  },
+  "sections": [
+    {
+      "title": "1. One-sentence idea and learning goal",
+      "body": "An async race condition happens when multiple operations are in flight and an older result arrives after a newer one, so the program shows or stores the wrong result. Your goal is not to force every request to finish in order. Your goal is to keep the program correct when the network finishes unpredictably. Remember: the last request to start is not necessarily the last request to finish."
+    },
+    {
+      "title": "2. A relatable story: two couriers, one delivery desk",
+      "body": "You ask a courier for the price of Market A. The courier is slow. Before it returns, you switch to Market B and ask for its price. The second courier is faster, so Market B arrives first and the desk displays it. Then the first courier arrives with Market A and blindly replaces the display. You are looking at Market B but reading Market A.\n\nBoth couriers behaved correctly. The bug is that the desk had no rule saying which delivery was still relevant. A user changing pages, a timer refreshing, or a slow API creates the same situation in a browser."
+    },
+    {
+      "title": "3. Tiny example: completion order is not start order",
+      "body": "The example below uses fake network delays so the race is predictable. The first call starts earlier but takes longer. The second call becomes the current request. Only the current request is allowed to render. Read the output before you run it: the new market renders first and the old market is ignored later. The generation guard protects state relevance, but it does not cancel wasted network work."
+    },
+    {
+      "title": "4. Technical glossary",
+      "body": "Asynchronous operation: work that starts now and completes later, such as fetch, a timer, or a database call.\n\nPromise: a JavaScript object representing the eventual fulfillment or rejection of asynchronous work.\n\nConcurrency: operations whose time periods overlap. They do not have to run on separate CPU cores.\n\nRace condition: a correctness failure whose result depends on timing or ordering.\n\nStale response: a result that was valid for an older request but is no longer relevant when it arrives.\n\nCleanup function: the function returned by a React useEffect setup. React runs it before an Effect re-runs with changed dependencies and when the component is removed.\n\nAbortController: a browser API that exposes a signal for asking an abortable operation, such as fetch, to stop waiting. Cancellation is not a universal rollback of server work."
+    },
+    {
+      "title": "5. Under the hood: React and fetch need a policy",
+      "body": "When an Effect starts fetch, JavaScript does not freeze the component until the server answers. Fetch returns a Promise, the browser handles other events, and a later Effect, click, timer, or navigation can start another fetch. Each Promise has its own completion callback.\n\nSuppose request A starts at t=0 ms and takes 500 ms. Request B starts at t=10 ms and takes 50 ms. B completes around t=60 ms. A completes around t=500 ms. A naive callback that accepts both lets A win only because it finished later. That is not the meaning of current.\n\nThere are two useful protections. A relevance guard uses an active flag or request generation; cleanup makes the old Effect inactive and its callback refuses to set state. AbortController passes a signal to fetch and calls abort during cleanup. This can stop an in-flight browser request and reduce client work. Keep a relevance check when an operation has several steps or a library does not fully honor cancellation.\n\nReact's dependency list controls when an Effect is replaced. It does not automatically order network responses. Cleanup is where you tell the old operation that its result is no longer allowed to update this component."
+    },
+    {
+      "title": "6. Verified 383 connection, tradeoffs, and failure modes",
+      "body": "In app/tregu/[slug]/page.tsx, the initial Effect calls load. Another Effect schedules window.setInterval(load, autoRefreshMs), using 120000 ms for sport and 300000 ms otherwise, and refreshes when a visible tab has become stale. Successful trades call load again. The code clears the interval and removes the visibility listener, which is good timer and event cleanup. However, the fetches started by load have no visible AbortController and no request-generation check.\n\nThe load function updates many state values from the detail response: market, football or F1 data, snapshots, trades, activity, related markets, positions, holders, comments, and more. It also separately requests the hub list. If loads overlap, a stale response could theoretically overwrite newer state. The correct next step is a scratch reproduction, not an automatic production patch.\n\nThe API route's Promise.all is a useful performance choice because independent reads overlap. Its tradeoff is that the combined result waits for the slowest member and rejects as a group when one input Promise rejects. This server-side concurrency is a different layer from the browser stale-response race, but the debugging method is the same: draw the timeline, name the shared state, and define which result may commit.\n\nRecognize these failure modes: setInterval starts new work before old work finishes; AbortError is shown as a user-facing failure; a guard covers the first fetch but not a later JSON parse or state update; cancellation is assumed to roll back a database write; or a boolean is mistaken for a guarantee that the server did no work."
+    },
+    {
+      "title": "7. Scratch exercise: prove the ordering, then protect it",
+      "body": "Spend 10 to 20 minutes in a scratch file, not in 383 production. First implement fakeFetch with a Promise and setTimeout. Then write naiveLoad that awaits fakeFetch and logs the result. Start old-market with a 500 ms delay, then start new-market with a 50 ms delay after 10 ms. Before running, predict the log lines and explain which one is wrong for a page showing new-market.\n\nNext add a request counter or active flag so only the current request can log. Run it again and explain why old-market is ignored. Optional: replace the guard with a fresh AbortController per request, catch AbortError silently, and handle other errors separately.\n\nWrite down the timeline at t=0, t=10, t=60, and t=500. Also explain why clearing an interval does not cancel a fetch that a previous callback already started. Do not mark the concept complete until you can explain the answer without looking at the code."
+    }
+  ],
+  "example": {
+    "language": "javascript",
+    "code": "const fakeFetch = (label, delay) => new Promise((resolve) =>\n  setTimeout(() => resolve(label), delay)\n);\n\nlet latestRequest = 0;\nasync function loadLatest(label, delay) {\n  const requestId = ++latestRequest;\n  const data = await fakeFetch(label, delay);\n  if (requestId !== latestRequest) {\n    console.log(\"ignore stale\", data);\n    return;\n  }\n  console.log(\"render\", data);\n}\n\nloadLatest(\"old-market\", 500);\nsetTimeout(() => loadLatest(\"new-market\", 50), 10);",
+    "explanation": "The first call receives requestId 1. Ten milliseconds later, the second receives requestId 2, making it current. The new-market Promise resolves first and its id matches latestRequest, so it renders. When old-market resolves later, its id is no longer current, so the result is ignored. In a React Effect the same idea can be expressed with a cleanup-set active flag. For real fetch calls, AbortController can additionally cancel the older browser request, but the API server may already have started work."
+  },
+  "diagram": {
+    "format": "mermaid",
+    "source": "sequenceDiagram\n  participant U as User or refresh timer\n  participant R as React market page\n  participant A as 383 API route\n  participant D as Supabase reads\n\n  U->>R: Start load A\n  R->>A: fetch detail A\n  A->>D: Read market data\n  U->>R: Navigate or refresh; start load B\n  R->>A: fetch detail B\n  A->>D: Read current data for B\n  A-->>R: B returns first\n  R->>R: Accept B because B is current\n  A-->>R: A returns later\n  alt Naive callback\n    R->>R: A overwrites state with stale data\n  else Cleanup or request-id guard\n    R->>R: Abort or ignore A\n  end",
+    "caption": "Read downward as time. B can finish before A even though A started first. The page needs an explicit rule that an old response cannot commit after a newer load becomes current."
+  },
+  "sources": [
+    {
+      "id": "s1",
+      "title": "useEffect – React",
+      "publisher": "React",
+      "url": "https://react.dev/reference/react/useEffect",
+      "factChecked": true,
+      "checkedAt": "2026-08-31T02:06:43+02:00",
+      "type": "official-docs",
+      "why": "Defines Effect setup, dependency changes, cleanup ordering, unmount cleanup, and the official data-fetching example that prevents stale results with an ignore flag.",
+      "imageUrl": null,
+      "imageAlt": null
+    },
+    {
+      "id": "s2",
+      "title": "AbortController - Web APIs",
+      "publisher": "MDN Web Docs",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/AbortController",
+      "factChecked": true,
+      "checkedAt": "2026-08-31T02:06:43+02:00",
+      "type": "official-docs",
+      "why": "Defines AbortController and AbortSignal and documents that abort can abort fetch requests, response-body consumption, and streams.",
+      "imageUrl": null,
+      "imageAlt": null
+    },
+    {
+      "id": "s3",
+      "title": "Promise.all() - JavaScript | MDN",
+      "publisher": "MDN Web Docs",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/all",
+      "factChecked": true,
+      "checkedAt": "2026-08-31T02:06:43+02:00",
+      "type": "official-docs",
+      "why": "Explains that Promise.all overlaps independent Promise work, fulfills after all inputs fulfill, and rejects when an input Promise rejects.",
+      "imageUrl": null,
+      "imageAlt": null
+    },
+    {
+      "id": "s4",
+      "title": "Window: setInterval() method",
+      "publisher": "MDN Web Docs",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/API/Window/setInterval",
+      "factChecked": true,
+      "checkedAt": "2026-08-31T02:06:43+02:00",
+      "type": "official-docs",
+      "why": "Documents repeated callback scheduling and clearInterval cancellation, which is relevant to timer cleanup but separate from cancellation of already-started fetch work.",
+      "imageUrl": null,
+      "imageAlt": null
+    },
+    {
+      "id": "s5",
+      "title": "Fixing Race Conditions in React with useEffect",
+      "publisher": "Max Rozen",
+      "url": "https://maxrozen.com/race-conditions-fetching-data-react-with-useeffect",
+      "factChecked": true,
+      "checkedAt": "2026-08-31T02:06:43+02:00",
+      "type": "independent",
+      "why": "Provides an independent reproducible explanation of out-of-order fetch completion and boolean-cleanup and AbortController approaches.",
+      "imageUrl": null,
+      "imageAlt": null
+    }
+  ],
+  "claimChecks": [
+    {
+      "claim": "React runs Effect cleanup before changed-dependency setup and when the component is removed.",
+      "sourceIds": ["s1"],
+      "status": "supported"
+    },
+    {
+      "claim": "Two fetches can complete out of order, allowing an older response to overwrite newer UI state unless relevance is checked.",
+      "sourceIds": ["s1", "s5"],
+      "status": "supported"
+    },
+    {
+      "claim": "AbortController supplies a signal and abort can stop a fetch operation in the browser.",
+      "sourceIds": ["s2"],
+      "status": "supported"
+    },
+    {
+      "claim": "setInterval repeatedly invokes a callback and clearInterval cancels the interval timer; that is separate from cancelling a fetch already started by a previous callback.",
+      "sourceIds": ["s4"],
+      "status": "supported"
+    },
+    {
+      "claim": "Promise.all overlaps independent asynchronous work and rejects when an input Promise rejects.",
+      "sourceIds": ["s3"],
+      "status": "supported"
+    },
+    {
+      "claim": "The visible 383 page starts load from mount, interval, visibility, and successful-trade paths, and has no visible request-id or AbortController guard in load.",
+      "sourceIds": [],
+      "status": "verified-by-read-only-project-inspection"
+    }
+  ],
+  "video": null,
+  "quiz": [
+    {
+      "id": "q1",
+      "question": "What is the core bug in an async race condition in a UI?",
+      "options": [
+        "A request always fails because JavaScript is single-threaded",
+        "An older result can arrive later and overwrite state for a newer request",
+        "React renders every component exactly twice in production",
+        "The server guarantees responses arrive in start order"
+      ],
+      "correctIndex": 1,
+      "explanation": "The problem is completion order. An older response can arrive after a newer response and overwrite current state. Overlapping asynchronous work exists even when callbacks run on one event loop."
+    },
+    {
+      "id": "q2",
+      "question": "Request A starts at 0 ms and takes 500 ms. Request B starts at 10 ms and takes 50 ms. Which response finishes first?",
+      "options": [
+        "A, because it started first",
+        "B, at about 60 ms",
+        "They always finish together",
+        "Neither; fetch forces serial execution"
+      ],
+      "correctIndex": 1,
+      "explanation": "B starts at 10 ms and takes 50 ms, so it finishes around 60 ms. A finishes around 500 ms. A naive callback accepting both lets old A overwrite B later."
+    },
+    {
+      "id": "q3",
+      "question": "What does a React Effect cleanup function do in this pattern?",
+      "options": [
+        "It guarantees the server rolls back every database write",
+        "It tells the old Effect or operation to stop affecting the component when it is no longer current",
+        "It makes every Promise resolve immediately",
+        "It replaces the dependency list"
+      ],
+      "correctIndex": 1,
+      "explanation": "Cleanup can remove listeners, clear timers, abort fetch, or mark an old operation inactive. It protects component relevance; it is not a universal server rollback."
+    },
+    {
+      "id": "q4",
+      "question": "Why can setInterval(load, 2000) be risky when load sometimes takes 5000 ms?",
+      "options": [
+        "The interval automatically waits for the previous Promise",
+        "It can start a new load before the previous load finishes, creating overlap",
+        "It prevents all network requests after the first call",
+        "It converts GET into POST"
+      ],
+      "correctIndex": 1,
+      "explanation": "setInterval schedules callbacks on its cadence; it does not await an async callback. Several loads can be in flight and need a concurrency policy."
+    },
+    {
+      "id": "q5",
+      "question": "What is the most accurate conclusion from inspecting the 383 market-detail page?",
+      "options": [
+        "The deployed page is proven broken in every session",
+        "The page never performs concurrent requests",
+        "The visible code has refresh paths and no visible stale-response guard, so overlap is a testable risk rather than a proven production bug",
+        "Adding clearInterval proves all fetches are cancelled"
+      ],
+      "correctIndex": 2,
+      "explanation": "Read-only inspection supports a risk hypothesis: load can be called from several paths and its fetches set state without a visible request-id or AbortController guard. A controlled latency test is still needed."
+    }
+  ],
+  "review": {
+    "dateFirstLearned": "2026-08-31",
+    "lastReview": "2026-08-31",
+    "nextReview": "same day after completing the exercise",
+    "schedule": [
+      "Today: draw the A and B timeline and explain why completion order differs from start order",
+      "2–3 days: distinguish concurrency, race condition, stale response, and cleanup",
+      "1 week: write a latest-request guard and an AbortController version in a scratch file",
+      "3 weeks: inspect every refresh path in a React page and identify overlap risks",
+      "2 months: compare client cancellation with server-side transaction and idempotency guarantees"
+    ]
+  },
+  "reviewCard": {
+    "conceptName": "Async race conditions and React Effect cleanup",
+    "plainLanguageExplanation": "When two requests overlap, an old answer can arrive after the new answer; only the current request should update the UI.",
+    "technicalDefinition": "A race condition is a correctness failure whose result depends on the timing or ordering of concurrent operations; in React data fetching, cleanup, cancellation, or a relevance guard prevents stale asynchronous callbacks from committing state.",
+    "relatedProjectOrBug": "383 Tregu market-detail refreshes, visibility refresh, post-trade load, and separate hub and detail fetches in app/tregu/[slug]/page.tsx.",
+    "dateFirstLearned": "2026-08-31",
+    "lastReviewDate": "2026-08-31",
+    "nextReviewDate": "2026-08-31",
+    "quizScores": [],
+    "confidenceLevel": "not yet assessed",
+    "mistakesAndMisconceptions": [],
+    "exampleOrExercise": "Use fakeFetch with 500 ms and 50 ms delays, predict naive completion order, then add a request-id guard or AbortController cleanup and explain why clearing an interval is not fetch cancellation.",
+    "sourceLinks": [
+      "https://react.dev/reference/react/useEffect",
+      "https://developer.mozilla.org/en-US/docs/Web/API/AbortController",
+      "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/all",
+      "https://developer.mozilla.org/en-US/docs/Web/API/Window/setInterval",
+      "https://maxrozen.com/race-conditions-fetching-data-react-with-useeffect"
+    ]
+  }
+}
