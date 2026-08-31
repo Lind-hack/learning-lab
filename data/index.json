@@ -1,5 +1,13 @@
 [
   {
+    "id": "2026-08-31-react-async-race-cleanup",
+    "isDemo": false,
+    "publishedAt": "2026-08-31T02:06:43+02:00",
+    "topic": "Async Race Conditions in React: Let Only Current Data Win",
+    "difficulty": "foundation",
+    "estimatedMinutes": 20
+  },
+  {
     "id": "2026-08-31-idempotency-retries",
     "isDemo": false,
     "publishedAt": "2026-08-31T01:39:23+02:00",
